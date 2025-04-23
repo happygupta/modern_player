@@ -1,0 +1,2 @@
+D:/shared-projects/Flutter Projects/Git/modern_player/example/android/app/.cxx/Debug/1n32e2o4/x86_64/CMakeFiles/edit_cache.dir
+D:/shared-projects/Flutter Projects/Git/modern_player/example/android/app/.cxx/Debug/1n32e2o4/x86_64/CMakeFiles/rebuild_cache.dir

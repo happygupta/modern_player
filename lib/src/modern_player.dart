@@ -120,7 +120,7 @@ class _ModernPlayerState extends State<ModernPlayer> {
     selectedQuality = defaultSource;
 
     // Network
-    if (defaultSource.sourceType == ModernPlayerSourceType.network) {
+    if (defaultSource.sourceType == VideoSourceType.network) {
       _playerController = VlcPlayerController.network(defaultSource.source,
           autoPlay: true,
           autoInitialize: true,
@@ -131,12 +131,12 @@ class _ModernPlayerState extends State<ModernPlayer> {
           ));
     }
     // File
-    else if (defaultSource.sourceType == ModernPlayerSourceType.file) {
+    else if (defaultSource.sourceType == VideoSourceType.file) {
       _playerController = VlcPlayerController.file(File(defaultSource.source),
           autoPlay: true, autoInitialize: true, hwAcc: HwAcc.auto);
     }
     // Youtube
-    else if (defaultSource.sourceType == ModernPlayerSourceType.youtube) {
+    else if (defaultSource.sourceType == VideoSourceType.youtube) {
       var yt = YoutubeExplode();
       youtubeId = defaultSource.source;
       StreamManifest manifest =
@@ -164,7 +164,7 @@ class _ModernPlayerState extends State<ModernPlayer> {
 
         widget.audioTracks.add(ModernPlayerAudioTrackOptions(
             source: manifest.audioOnly.withHighestBitrate().url.toString(),
-            sourceType: ModernPlayerAudioSourceType.network));
+            sourceType: AudioSourceType.network));
 
         ModernPlayerVideoData? defaultSourceYt = _getDefaultTrackSource(
             selectors: widget.defaultSelectionOptions?.defaultQualitySelectors,
@@ -250,7 +250,7 @@ class _ModernPlayerState extends State<ModernPlayer> {
 
   void _addSubtitles() async {
     for (var subtitle in widget.subtitles) {
-      if (subtitle.sourceType == ModernPlayerSubtitleSourceType.file) {
+      if (subtitle.sourceType == SubtitleSourceType.file) {
         if (await File(subtitle.source).exists()) {
           _playerController.addSubtitleFromFile(File(subtitle.source),
               isSelected: subtitle.isSelected);
@@ -266,7 +266,7 @@ class _ModernPlayerState extends State<ModernPlayer> {
 
   void _addAudioTracks() async {
     for (var audio in widget.audioTracks) {
-      if (audio.sourceType == ModernPlayerAudioSourceType.file) {
+      if (audio.sourceType == AudioSourceType.file) {
         if (await File(audio.source).exists()) {
           _playerController.addAudioFromFile(File(audio.source),
               isSelected: audio.isSelected);
