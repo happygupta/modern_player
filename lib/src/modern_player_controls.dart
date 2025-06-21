@@ -622,11 +622,13 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                                     width: 50,
                                     child: InkWell(
                                       onTap: () {
-                                        _startHideTimer();
-                                        showOptions(context);
+                                        if (!_isLoading) {
+                                          _startHideTimer();
+                                          showOptions(context);
 
-                                        widget.callbackOptions.onMenuPressed
-                                            ?.call();
+                                          widget.callbackOptions.onMenuPressed
+                                              ?.call();
+                                        }
                                       },
                                       child: Card(
                                         color: getIconsBackgroundColor(),
