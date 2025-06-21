@@ -870,6 +870,9 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       showDragHandle: true,
       backgroundColor: getMenuBackgroundColor(),
       constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
       builder: (context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
         child: Column(
@@ -1112,6 +1115,270 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     Color? color =
         widget.themeOptions.backgroundColor ?? Colors.black.withOpacity(.75);
     return color;
+  }
+
+  void showQualityOptions(BuildContext context,
+      {required Color menuColor,
+      required ModernPlayerVideoData currentData,
+      required List<ModernPlayerVideoData> allData,
+      required Function(ModernPlayerVideoData videoData) onChangedQuality}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...allData.map(
+              (e) => InkWell(
+                onTap: () {
+                  if (e.label != currentData.label) {
+                    Navigator.pop(context);
+                    onChangedQuality.call(e);
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      if (e.label == currentData.label)
+                        const SizedBox(
+                          width: 15,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                      SizedBox(
+                        width: e.label == currentData.label ? 20 : 35,
+                      ),
+                      Text(
+                        e.label,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void showPlaybackSpeedOptions(BuildContext context,
+      {required Color menuColor,
+      required String text,
+      required double currentSpeed,
+      required List<double> allSpeeds,
+      required Function(double selectedSpeed) onChangedSpeed}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...allSpeeds.map(
+              (e) => InkWell(
+                onTap: () {
+                  if (e != currentSpeed) {
+                    Navigator.pop(context);
+                    onChangedSpeed.call(e);
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      if (e == currentSpeed)
+                        const SizedBox(
+                          width: 15,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                      SizedBox(
+                        width: e == currentSpeed ? 20 : 35,
+                      ),
+                      Text(
+                        e == 1 ? text : "${e.toStringAsFixed(2)}x",
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void showSubtitleOptions(BuildContext context,
+      {required Color menuColor,
+      required int activeTrack,
+      required Map<dynamic, dynamic> allTracks,
+      required Function(MapEntry<dynamic, dynamic> selected) onChangedSubtitle}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  onChangedSubtitle.call(const MapEntry(-1, "None"));
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      if (allTracks[activeTrack] == null)
+                        const SizedBox(
+                          width: 15,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                      SizedBox(
+                        width: allTracks[activeTrack] == null ? 20 : 35,
+                      ),
+                      const Text(
+                        "None",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              ...allTracks.entries.map(
+                (e) => InkWell(
+                  onTap: () {
+                    if (e.key != activeTrack) {
+                      Navigator.pop(context);
+                      onChangedSubtitle.call(e);
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        if (e.value == allTracks[activeTrack])
+                          const SizedBox(
+                            width: 15,
+                            child: Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                        SizedBox(
+                          width: e.value == allTracks[activeTrack] ? 20 : 35,
+                        ),
+                        Text(
+                          e.value,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void showAudioOptions(BuildContext context,
+      {required Color menuColor,
+      required int activeTrack,
+      required Map<dynamic, dynamic> allTracks,
+      required Function(MapEntry<dynamic, dynamic> selectedTrack) onChangedAudio}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...allTracks.entries.map(
+                (e) => InkWell(
+                  onTap: () {
+                    if (e.key != activeTrack) {
+                      Navigator.pop(context);
+                      onChangedAudio.call(e);
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        if (e.value == allTracks[activeTrack])
+                          const SizedBox(
+                            width: 15,
+                            child: Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                        SizedBox(
+                          width: e.value == allTracks[activeTrack] ? 20 : 35,
+                        ),
+                        Text(
+                          e.value,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

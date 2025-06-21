@@ -142,87 +142,87 @@ class ModernPlayerState extends State<ModernPlayer> {
     selectedQuality = defaultSource;
 
     try {
-      // Network
-      if (defaultSource.sourceType == ModernPlayerSourceType.network) {
-        _playerController = VlcPlayerController.network(defaultSource.source,
-            autoPlay: true,
-            autoInitialize: true,
-            hwAcc: HwAcc.auto,
-            options: VlcPlayerOptions(
-              subtitle: VlcSubtitleOptions(
-                  [VlcSubtitleOptions.color(VlcSubtitleColor.white)]),
-            ));
-      }
-      // File
-      else if (defaultSource.sourceType == ModernPlayerSourceType.file) {
-        _playerController = VlcPlayerController.file(File(defaultSource.source),
-            autoPlay: true, autoInitialize: true, hwAcc: HwAcc.auto);
-      }
-      // Youtube
-      else if (defaultSource.sourceType == ModernPlayerSourceType.youtube) {
-        var yt = YoutubeExplode();
-        youtubeId = defaultSource.source;
-        StreamManifest manifest =
-            await yt.videos.streamsClient.getManifest(youtubeId);
+    // Network
+    if (defaultSource.sourceType == ModernPlayerSourceType.network) {
+      _playerController = VlcPlayerController.network(defaultSource.source,
+          autoPlay: true,
+          autoInitialize: true,
+          hwAcc: HwAcc.auto,
+          options: VlcPlayerOptions(
+            subtitle: VlcSubtitleOptions(
+                [VlcSubtitleOptions.color(VlcSubtitleColor.white)]),
+          ));
+    }
+    // File
+    else if (defaultSource.sourceType == ModernPlayerSourceType.file) {
+      _playerController = VlcPlayerController.file(File(defaultSource.source),
+          autoPlay: true, autoInitialize: true, hwAcc: HwAcc.auto);
+    }
+    // Youtube
+    else if (defaultSource.sourceType == ModernPlayerSourceType.youtube) {
+      var yt = YoutubeExplode();
+      youtubeId = defaultSource.source;
+      StreamManifest manifest =
+          await yt.videos.streamsClient.getManifest(youtubeId);
 
-        if (widget.video.fetchQualities ?? false) {
-          List<ModernPlayerVideoData> ytVideos = List.empty(growable: true);
+      if (widget.video.fetchQualities ?? false) {
+        List<ModernPlayerVideoData> ytVideos = List.empty(growable: true);
 
-          for (var element in manifest.videoOnly) {
-            ModernPlayerVideoData videoData =
-                ModernPlayerVideoDataYoutube.network(
-                    label: element.qualityLabel,
-                    url: element.url.toString(),
-                    audioOverride:
-                        manifest.audioOnly.withHighestBitrate().url.toString());
+        for (var element in manifest.videoOnly) {
+          ModernPlayerVideoData videoData =
+              ModernPlayerVideoDataYoutube.network(
+                  label: element.qualityLabel,
+                  url: element.url.toString(),
+                  audioOverride:
+                      manifest.audioOnly.withHighestBitrate().url.toString());
 
-            if (ytVideos
-                .where((element) => element.label == videoData.label)
-                .isEmpty) {
-              ytVideos.insert(0, videoData);
-            }
+          if (ytVideos
+              .where((element) => element.label == videoData.label)
+              .isEmpty) {
+            ytVideos.insert(0, videoData);
           }
-
-          videosData = ytVideos;
-
-          widget.audioTracks.add(ModernPlayerAudioTrackOptions(
-              source: manifest.audioOnly.withHighestBitrate().url.toString(),
-              sourceType: ModernPlayerAudioSourceType.network));
-
-          ModernPlayerVideoData? defaultSourceYt = _getDefaultTrackSource(
-              selectors: widget.defaultSelectionOptions?.defaultQualitySelectors,
-              trackEntries: ytVideos);
-
-          selectedQuality = defaultSourceYt ?? defaultSource;
-
-          _playerController = VlcPlayerController.network(
-              defaultSourceYt?.source ?? ytVideos.first.source,
-              autoPlay: true,
-              autoInitialize: true,
-              hwAcc: HwAcc.auto);
-        } else {
-          _playerController = VlcPlayerController.network(
-              manifest.muxed.withHighestBitrate().url.toString(),
-              autoPlay: true,
-              autoInitialize: true,
-              hwAcc: HwAcc.auto);
         }
 
-        yt.close();
-      }
-      // Asset
-      else {
-        _playerController = VlcPlayerController.asset(defaultSource.source,
-            autoPlay: true, autoInitialize: true, hwAcc: HwAcc.full);
+        videosData = ytVideos;
+
+        widget.audioTracks.add(ModernPlayerAudioTrackOptions(
+            source: manifest.audioOnly.withHighestBitrate().url.toString(),
+            sourceType: ModernPlayerAudioSourceType.network));
+
+        ModernPlayerVideoData? defaultSourceYt = _getDefaultTrackSource(
+            selectors: widget.defaultSelectionOptions?.defaultQualitySelectors,
+            trackEntries: ytVideos);
+
+        selectedQuality = defaultSourceYt ?? defaultSource;
+
+        _playerController = VlcPlayerController.network(
+            defaultSourceYt?.source ?? ytVideos.first.source,
+            autoPlay: true,
+            autoInitialize: true,
+            hwAcc: HwAcc.auto);
+      } else {
+        _playerController = VlcPlayerController.network(
+            manifest.muxed.withHighestBitrate().url.toString(),
+            autoPlay: true,
+            autoInitialize: true,
+            hwAcc: HwAcc.auto);
       }
 
-      _playerController.addOnInitListener(_onInitialize);
-      _playerController.addListener(_checkVideoLoaded);
+      yt.close();
+    }
+    // Asset
+    else {
+      _playerController = VlcPlayerController.asset(defaultSource.source,
+          autoPlay: true, autoInitialize: true, hwAcc: HwAcc.full);
+    }
 
-      setState(() {
+    _playerController.addOnInitListener(_onInitialize);
+    _playerController.addListener(_checkVideoLoaded);
+
+    setState(() {
         _isControllerInitialized = true;
-        canDisplayVideo = true;
-      });
+      canDisplayVideo = true;
+    });
     } catch (e) {
       print('Error initializing player: $e');
       setState(() {
