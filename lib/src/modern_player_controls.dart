@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:modern_player/modern_player.dart';
-import 'package:modern_player/src/modern_player_options.dart';
+
 import 'package:modern_player/src/others/modern_player_utils.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -22,7 +22,9 @@ class ModernPlayerControls extends StatefulWidget {
       required this.themeOptions,
       required this.translationOptions,
       required this.callbackOptions,
-      required this.selectedQuality});
+      required this.selectedQuality,
+      required this.isFullscreen,
+      required this.onToggleFullscreen});
 
   final VlcPlayerController player;
   final Size viewSize;
@@ -33,6 +35,8 @@ class ModernPlayerControls extends StatefulWidget {
   final ModernPlayerTranslationOptions translationOptions;
   final ModernPlayerCallbackOptions callbackOptions;
   final ModernPlayerVideoData selectedQuality;
+  final bool isFullscreen;
+  final VoidCallback onToggleFullscreen;
 
   @override
   State<ModernPlayerControls> createState() => _ModernPlayerControlsState();
@@ -778,6 +782,23 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                 color: Colors.white,
               ),
             ),
+            if (widget.controlsOptions.showFullscreen)
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  onPressed: () {
+                    _startHideTimer();
+                    widget.onToggleFullscreen();
+                  },
+                  icon: Icon(
+                    widget.isFullscreen
+                        ? Icons.fullscreen_exit
+                        : Icons.fullscreen,
+                    size: 24,
+                  ),
+                  color: Colors.white,
+                ),
+              ),
             const SizedBox(
               width: 5,
             ),

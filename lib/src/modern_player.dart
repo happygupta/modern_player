@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:modern_player/src/modern_player_controls.dart';
 import 'package:modern_player/src/modern_player_options.dart';
@@ -17,7 +18,8 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 /// when calling [createPlayer]
 class ModernPlayer extends StatefulWidget {
   const ModernPlayer._(
-      {required this.video,
+      {super.key,
+      required this.video,
       required this.subtitles,
       required this.audioTracks,
       this.defaultSelectionOptions,
@@ -56,7 +58,10 @@ class ModernPlayer extends StatefulWidget {
   /// With [callbackOptions] option you can perform custom actions on callback.
   final ModernPlayerCallbackOptions? callbackOptions;
 
-  static Widget createPlayer(
+  /// Global key for accessing the player state
+  static final GlobalKey<ModernPlayerState> _playerKey = GlobalKey<ModernPlayerState>();
+
+  static ModernPlayer createPlayer(
       {required ModernPlayerVideo video,
       List<ModernPlayerSubtitleOptions>? subtitles,
       List<ModernPlayerAudioTrackOptions>? audioTracks,
@@ -67,6 +72,7 @@ class ModernPlayer extends StatefulWidget {
       ModernPlayerTranslationOptions? translationOptions,
       ModernPlayerCallbackOptions? callbackOptions}) {
     return ModernPlayer._(
+      key: _playerKey,
       video: video,
       subtitles: subtitles ?? [],
       audioTracks: audioTracks ?? [],
@@ -79,15 +85,22 @@ class ModernPlayer extends StatefulWidget {
     );
   }
 
+  /// Get the current playing position in milliseconds
+  int getCurrentPosition() {
+    return _playerKey.currentState?.getCurrentPosition() ?? 0;
+  }
+
   @override
-  State<ModernPlayer> createState() => _ModernPlayerState();
+  State<ModernPlayer> createState() => ModernPlayerState();
 }
 
-class _ModernPlayerState extends State<ModernPlayer> {
+class ModernPlayerState extends State<ModernPlayer> {
   late VlcPlayerController _playerController;
+  bool _isControllerInitialized = false;
 
   bool isDisposed = false;
   bool canDisplayVideo = false;
+  bool _isFullscreen = false;
 
   double visibilityFraction = 1;
   String? youtubeId;
@@ -106,6 +119,15 @@ class _ModernPlayerState extends State<ModernPlayer> {
 
     videosData = widget.video.videosData;
     _setPlayer();
+
+    // Listen to orientation changes if auto-fullscreen is enabled
+    if (widget.controlsOptions?.enableAutoFullscreen ?? true) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
   }
 
   void _setPlayer() async {
@@ -119,86 +141,94 @@ class _ModernPlayerState extends State<ModernPlayer> {
 
     selectedQuality = defaultSource;
 
-    // Network
-    if (defaultSource.sourceType == ModernPlayerSourceType.network) {
-      _playerController = VlcPlayerController.network(defaultSource.source,
-          autoPlay: true,
-          autoInitialize: true,
-          hwAcc: HwAcc.auto,
-          options: VlcPlayerOptions(
-            subtitle: VlcSubtitleOptions(
-                [VlcSubtitleOptions.color(VlcSubtitleColor.white)]),
-          ));
-    }
-    // File
-    else if (defaultSource.sourceType == ModernPlayerSourceType.file) {
-      _playerController = VlcPlayerController.file(File(defaultSource.source),
-          autoPlay: true, autoInitialize: true, hwAcc: HwAcc.auto);
-    }
-    // Youtube
-    else if (defaultSource.sourceType == ModernPlayerSourceType.youtube) {
-      var yt = YoutubeExplode();
-      youtubeId = defaultSource.source;
-      StreamManifest manifest =
-          await yt.videos.streamsClient.getManifest(youtubeId);
+    try {
+      // Network
+      if (defaultSource.sourceType == ModernPlayerSourceType.network) {
+        _playerController = VlcPlayerController.network(defaultSource.source,
+            autoPlay: true,
+            autoInitialize: true,
+            hwAcc: HwAcc.auto,
+            options: VlcPlayerOptions(
+              subtitle: VlcSubtitleOptions(
+                  [VlcSubtitleOptions.color(VlcSubtitleColor.white)]),
+            ));
+      }
+      // File
+      else if (defaultSource.sourceType == ModernPlayerSourceType.file) {
+        _playerController = VlcPlayerController.file(File(defaultSource.source),
+            autoPlay: true, autoInitialize: true, hwAcc: HwAcc.auto);
+      }
+      // Youtube
+      else if (defaultSource.sourceType == ModernPlayerSourceType.youtube) {
+        var yt = YoutubeExplode();
+        youtubeId = defaultSource.source;
+        StreamManifest manifest =
+            await yt.videos.streamsClient.getManifest(youtubeId);
 
-      if (widget.video.fetchQualities ?? false) {
-        List<ModernPlayerVideoData> ytVideos = List.empty(growable: true);
+        if (widget.video.fetchQualities ?? false) {
+          List<ModernPlayerVideoData> ytVideos = List.empty(growable: true);
 
-        for (var element in manifest.videoOnly) {
-          ModernPlayerVideoData videoData =
-              ModernPlayerVideoDataYoutube.network(
-                  label: element.qualityLabel,
-                  url: element.url.toString(),
-                  audioOverride:
-                      manifest.audioOnly.withHighestBitrate().url.toString());
+          for (var element in manifest.videoOnly) {
+            ModernPlayerVideoData videoData =
+                ModernPlayerVideoDataYoutube.network(
+                    label: element.qualityLabel,
+                    url: element.url.toString(),
+                    audioOverride:
+                        manifest.audioOnly.withHighestBitrate().url.toString());
 
-          if (ytVideos
-              .where((element) => element.label == videoData.label)
-              .isEmpty) {
-            ytVideos.insert(0, videoData);
+            if (ytVideos
+                .where((element) => element.label == videoData.label)
+                .isEmpty) {
+              ytVideos.insert(0, videoData);
+            }
           }
+
+          videosData = ytVideos;
+
+          widget.audioTracks.add(ModernPlayerAudioTrackOptions(
+              source: manifest.audioOnly.withHighestBitrate().url.toString(),
+              sourceType: ModernPlayerAudioSourceType.network));
+
+          ModernPlayerVideoData? defaultSourceYt = _getDefaultTrackSource(
+              selectors: widget.defaultSelectionOptions?.defaultQualitySelectors,
+              trackEntries: ytVideos);
+
+          selectedQuality = defaultSourceYt ?? defaultSource;
+
+          _playerController = VlcPlayerController.network(
+              defaultSourceYt?.source ?? ytVideos.first.source,
+              autoPlay: true,
+              autoInitialize: true,
+              hwAcc: HwAcc.auto);
+        } else {
+          _playerController = VlcPlayerController.network(
+              manifest.muxed.withHighestBitrate().url.toString(),
+              autoPlay: true,
+              autoInitialize: true,
+              hwAcc: HwAcc.auto);
         }
 
-        videosData = ytVideos;
-
-        widget.audioTracks.add(ModernPlayerAudioTrackOptions(
-            source: manifest.audioOnly.withHighestBitrate().url.toString(),
-            sourceType: ModernPlayerAudioSourceType.network));
-
-        ModernPlayerVideoData? defaultSourceYt = _getDefaultTrackSource(
-            selectors: widget.defaultSelectionOptions?.defaultQualitySelectors,
-            trackEntries: ytVideos);
-
-        selectedQuality = defaultSourceYt ?? defaultSource;
-
-        _playerController = VlcPlayerController.network(
-            defaultSourceYt?.source ?? ytVideos.first.source,
-            autoPlay: true,
-            autoInitialize: true,
-            hwAcc: HwAcc.auto);
-      } else {
-        _playerController = VlcPlayerController.network(
-            manifest.muxed.withHighestBitrate().url.toString(),
-            autoPlay: true,
-            autoInitialize: true,
-            hwAcc: HwAcc.auto);
+        yt.close();
+      }
+      // Asset
+      else {
+        _playerController = VlcPlayerController.asset(defaultSource.source,
+            autoPlay: true, autoInitialize: true, hwAcc: HwAcc.full);
       }
 
-      yt.close();
-    }
-    // Asset
-    else {
-      _playerController = VlcPlayerController.asset(defaultSource.source,
-          autoPlay: true, autoInitialize: true, hwAcc: HwAcc.full);
-    }
+      _playerController.addOnInitListener(_onInitialize);
+      _playerController.addListener(_checkVideoLoaded);
 
-    _playerController.addOnInitListener(_onInitialize);
-    _playerController.addListener(_checkVideoLoaded);
-
-    setState(() {
-      canDisplayVideo = true;
-    });
+      setState(() {
+        _isControllerInitialized = true;
+        canDisplayVideo = true;
+      });
+    } catch (e) {
+      print('Error initializing player: $e');
+      setState(() {
+        canDisplayVideo = false;
+      });
+    }
   }
 
   /// Helper function to set default track for subtitle, audio, etc
@@ -303,8 +333,90 @@ class _ModernPlayerState extends State<ModernPlayer> {
     }
   }
 
+  /// Enter fullscreen mode
+  void enterFullscreen() async {
+    if (!_isFullscreen) {
+      // Store current playback state and pause immediately
+      final wasPlaying = _playerController.value.isPlaying;
+      final currentPosition = _playerController.value.position;
+      await _playerController.pause();
+      
+      setState(() {
+        _isFullscreen = true;
+      });
+      
+      // Lock to landscape orientation
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      
+      // Hide system UI completely
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.immersive,
+        overlays: [],
+      );
+
+      // Wait for the transition to complete before restoring playback
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted && wasPlaying) {
+        await _playerController.seekTo(currentPosition);
+        await _playerController.play();
+      }
+      
+      widget.callbackOptions?.onEnterFullscreen?.call();
+    }
+  }
+
+  /// Exit fullscreen mode
+  void exitFullscreen() async {
+    if (_isFullscreen) {
+      // Store current playback state and pause immediately
+      final wasPlaying = _playerController.value.isPlaying;
+      final currentPosition = _playerController.value.position;
+      await _playerController.pause();
+      
+      setState(() {
+        _isFullscreen = false;
+      });
+      
+      // Return to portrait orientation
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+      
+      // Restore system UI
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      );
+
+      // Wait for the transition to complete before restoring playback
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted && wasPlaying) {
+        await _playerController.seekTo(currentPosition);
+        await _playerController.play();
+      }
+      
+      widget.callbackOptions?.onExitFullscreen?.call();
+    }
+  }
+
+  /// Toggle fullscreen mode
+  void toggleFullscreen() {
+    if (_isFullscreen) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
+    }
+  }
+
   @override
-  void dispose() async {
+  void dispose() {
+    // Ensure player is stopped before disposal
+    if (_playerController.value.isInitialized && _playerController.value.isPlaying) {
+      _playerController.pause();
+    }
     super.dispose();
     if (_playerController.value.isInitialized) {
       _playerController.dispose();
@@ -317,11 +429,44 @@ class _ModernPlayerState extends State<ModernPlayer> {
       WakelockPlus.disable();
     }
 
+    // Reset system UI and orientation
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+
     isDisposed = true;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Use a single player instance
+    final player = KeyedSubtree(
+      key: const ValueKey('player_instance'),
+      child: _buildPlayer(),
+    );
+    
+    return WillPopScope(
+      onWillPop: () async {
+        if (_isFullscreen) {
+          exitFullscreen();
+          return false;
+        }
+        return true;
+      },
+      child: _isFullscreen
+          ? Container(
+              color: Colors.black,
+              child: player,
+            )
+          : player,
+    );
+  }
+
+  Widget _buildPlayer() {
     return canDisplayVideo
         ? Stack(
             fit: StackFit.expand,
@@ -336,7 +481,9 @@ class _ModernPlayerState extends State<ModernPlayer> {
                   },
                   child: VlcPlayer(
                     controller: _playerController,
-                    aspectRatio: _playerController.value.aspectRatio,
+                    aspectRatio: _isFullscreen 
+                        ? MediaQuery.of(context).size.width / MediaQuery.of(context).size.height
+                        : _playerController.value.aspectRatio,
                   ),
                 ),
               ),
@@ -357,6 +504,8 @@ class _ModernPlayerState extends State<ModernPlayer> {
                   callbackOptions:
                       widget.callbackOptions ?? ModernPlayerCallbackOptions(),
                   selectedQuality: selectedQuality,
+                  isFullscreen: _isFullscreen,
+                  onToggleFullscreen: toggleFullscreen,
                 )
             ],
           )
@@ -372,5 +521,13 @@ class _ModernPlayerState extends State<ModernPlayer> {
                   ),
             ),
           );
+  }
+
+  /// Get the current playing position in milliseconds
+  int getCurrentPosition() {
+    if (!_isControllerInitialized || !_playerController.value.isInitialized) {
+      return 0;
+    }
+    return _playerController.value.position.inMilliseconds;
   }
 }
