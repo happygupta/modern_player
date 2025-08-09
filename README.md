@@ -1,4 +1,4 @@
-# ModernPlayer
+# ModernPlayer v2 (see addons below)
 
 Enhance your video playback experience with modern_player—a feature-rich Flutter
 package for flutter_vlc_player. Enjoy auto-hiding controls, double-tap to seek,
@@ -71,6 +71,11 @@ features:
 With modern_player, you can provide a top-notch video playback experience to
 your users, complete with an intuitive and fully customizable interface. Say
 goodbye to mundane video controls and give your app an edge with modern_player.
+- **FullScreen Support** Added in V2 the support for fullscreen.
+
+- **getCurrentPosition Feature** Allows to continue playing for current position without restarting the playback.
+
+With modern_player, you can provide a top-notch video playback experience to your users, complete with an intuitive and fully customizable interface. Say goodbye to mundane video controls and give your app an edge with modern_player.
 
 ## To-do
 

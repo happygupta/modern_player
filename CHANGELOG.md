@@ -8,6 +8,10 @@
   (https://github.com/itsSagarBro/modern_player/issues/17)
 - Migrated example app to Flutter 3.16
 - Updated screen_brightness plugin to version 2.1.2
+## 0.1.1
+
+* Added fullscreen management support
+* Added ability to fetch current video position
 
 ## 0.1.0
 

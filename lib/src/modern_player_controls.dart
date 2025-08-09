@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:modern_player/modern_player.dart';
-import 'package:modern_player/src/modern_player_options.dart';
+
 import 'package:modern_player/src/others/modern_player_utils.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -22,7 +22,9 @@ class ModernPlayerControls extends StatefulWidget {
       required this.themeOptions,
       required this.translationOptions,
       required this.callbackOptions,
-      required this.selectedQuality});
+      required this.selectedQuality,
+      required this.isFullscreen,
+      required this.onToggleFullscreen});
 
   final VlcPlayerController player;
   final Size viewSize;
@@ -33,6 +35,8 @@ class ModernPlayerControls extends StatefulWidget {
   final ModernPlayerTranslationOptions translationOptions;
   final ModernPlayerCallbackOptions callbackOptions;
   final ModernPlayerVideoData selectedQuality;
+  final bool isFullscreen;
+  final VoidCallback onToggleFullscreen;
 
   @override
   State<ModernPlayerControls> createState() => _ModernPlayerControlsState();
@@ -607,11 +611,13 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                                     width: 50,
                                     child: InkWell(
                                       onTap: () {
-                                        _startHideTimer();
-                                        showOptions(context);
+                                        if (!_isLoading) {
+                                          _startHideTimer();
+                                          showOptions(context);
 
-                                        widget.callbackOptions.onMenuPressed
-                                            ?.call();
+                                          widget.callbackOptions.onMenuPressed
+                                              ?.call();
+                                        }
                                       },
                                       child: Card(
                                         color: getIconsBackgroundColor(),
@@ -809,38 +815,59 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                   width: 10,
                 ),
                 Expanded(
-                    child: SliderTheme(
-                  data: SliderThemeData(
-                      trackShape: VideoSliderTrackShape(),
-                      activeTrackColor: widget.themeOptions.progressSliderTheme
-                              ?.activeSliderColor ??
-                          Colors.greenAccent,
-                      secondaryActiveTrackColor: widget.themeOptions
-                              .progressSliderTheme?.bufferSliderColor ??
-                          Colors.white,
-                      thumbColor:
-                          widget.themeOptions.progressSliderTheme?.thumbColor ??
-                              Colors.white,
-                      inactiveTrackColor: widget.themeOptions
-                              .progressSliderTheme?.inactiveSliderColor ??
-                          Colors.white60,
-                      thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 7, pressedElevation: 10)),
-                  child: Slider(
-                    value: currentValue.toDouble(),
-                    min: 0,
-                    max: duration.toDouble(),
-                    onChanged: (value) {
-                      _startHideTimer();
-                      setState(() {
-                        _seekPos = value.toInt();
-                      });
-                    },
-                    onChangeEnd: (value) {
-                      _seekTo(Duration(seconds: value.toInt()));
-                    },
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                        trackShape: VideoSliderTrackShape(),
+                        activeTrackColor: widget.themeOptions
+                                .progressSliderTheme?.activeSliderColor ??
+                            Colors.greenAccent,
+                        secondaryActiveTrackColor: widget.themeOptions
+                                .progressSliderTheme?.bufferSliderColor ??
+                            Colors.white,
+                        thumbColor: widget
+                                .themeOptions.progressSliderTheme?.thumbColor ??
+                            Colors.white,
+                        inactiveTrackColor: widget.themeOptions
+                                .progressSliderTheme?.inactiveSliderColor ??
+                            Colors.white60,
+                        thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 7, pressedElevation: 10)),
+                    child: Slider(
+                      value: currentValue.toDouble(),
+                      min: 0,
+                      max: duration.toDouble(),
+                      onChanged: (value) {
+                        _startHideTimer();
+                        setState(() {
+                          _seekPos = value.toInt();
+                        });
+                      },
+                      onChangeEnd: (value) {
+                        _seekTo(Duration(seconds: value.toInt()));
+                      },
+                    ),
                   ),
-                )),
+                ),
+                if (widget.controlsOptions.showFullscreen)
+                  SizedBox(
+                    width: 40,
+                    child: IconButton(
+                      onPressed: () {
+                        _startHideTimer();
+                        widget.onToggleFullscreen();
+                      },
+                      icon: Icon(
+                        widget.isFullscreen
+                            ? Icons.fullscreen_exit
+                            : Icons.fullscreen,
+                        size: 24,
+                      ),
+                      color: Colors.white,
+                    ),
+                  ),
+                const SizedBox(
+                  width: 5,
+                ),
                 const SizedBox(
                   width: 10,
                 ),
@@ -869,95 +896,94 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       showDragHandle: true,
       backgroundColor: getMenuBackgroundColor(),
       constraints: const BoxConstraints(maxWidth: 400),
-      builder: (context) => SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  ModernPlayerMenus().showQualityOptions(context,
-                      menuColor: getMenuBackgroundColor(),
-                      currentData: _currentVideoData,
-                      allData: widget.videos,
-                      onChangedQuality: _changeVideoQuality);
-                },
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.settings_outlined,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(
-                      width: 20,
-                    ),
-                    Text(
-                      "${translationOptions.qualityHeaderText ?? "Quality"}  ◉  ",
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    Text(
-                      _currentVideoData.label,
-                      style:
-                          const TextStyle(color: Colors.white60, fontSize: 16),
-                    )
-                  ],
-                ),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                ModernPlayerMenus().showQualityOptions(context,
+                    menuColor: getMenuBackgroundColor(),
+                    currentData: _currentVideoData,
+                    allData: widget.videos,
+                    onChangedQuality: _changeVideoQuality);
+              },
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.settings_outlined,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(
+                    width: 20,
+                  ),
+                  Text(
+                    "${translationOptions.qualityHeaderText ?? "Quality"}  ◉  ",
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  Text(
+                    _currentVideoData.label,
+                    style: const TextStyle(color: Colors.white60, fontSize: 16),
+                  )
+                ],
               ),
-              const SizedBox(
-                height: 30,
+            ),
+            const SizedBox(
+              height: 30,
+            ),
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                ModernPlayerMenus().showPlabackSpeedOptions(context,
+                    menuColor: getMenuBackgroundColor(),
+                    text:
+                        translationOptions.defaultPlaybackSpeedText ?? "Normal",
+                    currentSpeed: player.value.playbackSpeed,
+                    allSpeeds: _playbackSpeeds, onChnagedSpeed: (speed) {
+                  player.setPlaybackSpeed(speed);
+                  widget.callbackOptions.onChangedPlaybackSpeed?.call(speed);
+                });
+              },
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.speed_rounded,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(
+                    width: 20,
+                  ),
+                  Text(
+                    "${translationOptions.playbackSpeedText ?? "Plaback speed"}  ◉  ",
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  Text(
+                    player.value.playbackSpeed == 1
+                        ? translationOptions.defaultPlaybackSpeedText ??
+                            "Normal"
+                        : "${player.value.playbackSpeed.toStringAsFixed(2)}x",
+                    style: const TextStyle(color: Colors.white60, fontSize: 16),
+                  )
+                ],
               ),
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  ModernPlayerMenus().showPlabackSpeedOptions(context,
-                      menuColor: getMenuBackgroundColor(),
-                      text: translationOptions.defaultPlaybackSpeedText ??
-                          "Normal",
-                      currentSpeed: player.value.playbackSpeed,
-                      allSpeeds: _playbackSpeeds, onChnagedSpeed: (speed) {
-                    player.setPlaybackSpeed(speed);
-                    widget.callbackOptions.onChangedPlaybackSpeed?.call(speed);
-                  });
-                },
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.speed_rounded,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(
-                      width: 20,
-                    ),
-                    Text(
-                      "${translationOptions.playbackSpeedText ?? "Plaback speed"}  ◉  ",
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    Text(
-                      player.value.playbackSpeed == 1
-                          ? translationOptions.defaultPlaybackSpeedText ??
-                              "Normal"
-                          : "${player.value.playbackSpeed.toStringAsFixed(2)}x",
-                      style:
-                          const TextStyle(color: Colors.white60, fontSize: 16),
-                    )
-                  ],
-                ),
-              ),
-              const SizedBox(
-                height: 30,
-              ),
-              _subtitleRowWidget(context),
-              const SizedBox(
-                height: 30,
-              ),
-              _audioRowWidget(context),
-              const SizedBox(
-                height: 10,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(
+              height: 30,
+            ),
+            _subtitleRowWidget(context),
+            const SizedBox(
+              height: 30,
+            ),
+            _audioRowWidget(context),
+            const SizedBox(
+              height: 10,
+            ),
+          ],
         ),
       ),
     );
@@ -1115,6 +1141,276 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     Color? color =
         widget.themeOptions.backgroundColor ?? Colors.black.withOpacity(.75);
     return color;
+  }
+
+  void showQualityOptions(BuildContext context,
+      {required Color menuColor,
+      required ModernPlayerVideoData currentData,
+      required List<ModernPlayerVideoData> allData,
+      required Function(ModernPlayerVideoData videoData) onChangedQuality}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...allData.map(
+              (e) => InkWell(
+                onTap: () {
+                  if (e.label != currentData.label) {
+                    Navigator.pop(context);
+                    onChangedQuality.call(e);
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      if (e.label == currentData.label)
+                        const SizedBox(
+                          width: 15,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                      SizedBox(
+                        width: e.label == currentData.label ? 20 : 35,
+                      ),
+                      Text(
+                        e.label,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void showPlaybackSpeedOptions(BuildContext context,
+      {required Color menuColor,
+      required String text,
+      required double currentSpeed,
+      required List<double> allSpeeds,
+      required Function(double selectedSpeed) onChangedSpeed}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...allSpeeds.map(
+              (e) => InkWell(
+                onTap: () {
+                  if (e != currentSpeed) {
+                    Navigator.pop(context);
+                    onChangedSpeed.call(e);
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      if (e == currentSpeed)
+                        const SizedBox(
+                          width: 15,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                      SizedBox(
+                        width: e == currentSpeed ? 20 : 35,
+                      ),
+                      Text(
+                        e == 1 ? text : "${e.toStringAsFixed(2)}x",
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void showSubtitleOptions(BuildContext context,
+      {required Color menuColor,
+      required int activeTrack,
+      required Map<dynamic, dynamic> allTracks,
+      required Function(MapEntry<dynamic, dynamic> selected)
+          onChangedSubtitle}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  onChangedSubtitle.call(const MapEntry(-1, "None"));
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      if (allTracks[activeTrack] == null)
+                        const SizedBox(
+                          width: 15,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                      SizedBox(
+                        width: allTracks[activeTrack] == null ? 20 : 35,
+                      ),
+                      const Text(
+                        "None",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              ...allTracks.entries.map(
+                (e) => InkWell(
+                  onTap: () {
+                    if (e.key != activeTrack) {
+                      Navigator.pop(context);
+                      onChangedSubtitle.call(e);
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        if (e.value == allTracks[activeTrack])
+                          const SizedBox(
+                            width: 15,
+                            child: Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                        SizedBox(
+                          width: e.value == allTracks[activeTrack] ? 20 : 35,
+                        ),
+                        Text(
+                          e.value,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void showAudioOptions(BuildContext context,
+      {required Color menuColor,
+      required int activeTrack,
+      required Map<dynamic, dynamic> allTracks,
+      required Function(MapEntry<dynamic, dynamic> selectedTrack)
+          onChangedAudio}) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: menuColor,
+      constraints: const BoxConstraints(maxWidth: 400),
+      isScrollControlled: true,
+      useRootNavigator: true,
+      elevation: 16,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...allTracks.entries.map(
+                (e) => InkWell(
+                  onTap: () {
+                    if (e.key != activeTrack) {
+                      Navigator.pop(context);
+                      onChangedAudio.call(e);
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        if (e.value == allTracks[activeTrack])
+                          const SizedBox(
+                            width: 15,
+                            child: Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                        SizedBox(
+                          width: e.value == allTracks[activeTrack] ? 20 : 35,
+                        ),
+                        Text(
+                          e.value,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
