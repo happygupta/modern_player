@@ -136,7 +136,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
   }
 
   /// Get audio and subtitle tracks
-  void _getTracks() async {
+  Future<void> _getTracks() async {
     // Run in parallel - they don't depend on each other.
     final tracksFutures = Future.wait([
       player.getAudioTracks(),
@@ -240,88 +240,78 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
   }
 
   void _changeVideoQuality(ModernPlayerVideoData videoData) async {
-    Duration lastPosition = player.value.position;
+    Duration lastPosition = _currentPos;
 
-    await player.pause().then((value) async {
-      setState(() {
-        _isLoading = true;
-      });
+    await player.pause();
 
-      if (videoData.sourceType == ModernPlayerSourceType.network) {
-        await player
-            .setMediaFromNetwork(videoData.source,
-                autoPlay: true, hwAcc: HwAcc.full)
-            .whenComplete(() async {
-          if (videoData is ModernPlayerVideoDataYoutube) {
-            await player.seekTo(lastPosition).then((value) async {
-              await player.addAudioFromNetwork(videoData.audioOverride!,
-                  isSelected: true);
-              _getTracks();
-              player.play();
-              setState(() {
-                _currentPos = lastPosition;
-                _currentVideoData = videoData;
-              });
-            });
-          } else {
-            _getTracks();
-            player.play();
-            setState(() {
-              _currentPos = lastPosition;
-              _currentVideoData = videoData;
-            });
-          }
+    setState(() {
+      _isLoading = true;
+    });
+
+    if (videoData.sourceType == VideoSourceType.network) {
+      await player.setMediaFromNetwork(videoData.source,
+          autoPlay: true, hwAcc: HwAcc.full);
+      await player.seekTo(lastPosition);
+
+      if (videoData is ModernPlayerVideoDataYoutube) {
+        await player.addAudioFromNetwork(videoData.audioOverride!,
+            isSelected: true);
+        await _getTracks();
+        await player.play();
+
+        setState(() {
+          _currentPos = lastPosition;
+          _currentVideoData = videoData;
         });
-      } else if (videoData.sourceType == ModernPlayerSourceType.file) {
-        await player
-            .setMediaFromFile(File(videoData.source),
-                autoPlay: true, hwAcc: HwAcc.full)
-            .whenComplete(() async {
-          await player.seekTo(lastPosition).then((value) {
-            player.play();
-            setState(() {
-              _currentPos = lastPosition;
-              _currentVideoData = videoData;
-            });
-          });
-        });
-      } else if (widget.videos.first.sourceType ==
-          ModernPlayerSourceType.youtube) {
-        var yt = YoutubeExplode();
-        StreamManifest manifest =
-            await yt.videos.streamsClient.getManifest(videoData.source);
-
-        VideoStreamInfo streamInfo = manifest.muxed.withHighestBitrate();
-
-        await player
-            .setMediaFromNetwork(streamInfo.url.toString(),
-                autoPlay: true, hwAcc: HwAcc.full)
-            .whenComplete(() async {
-          await player.seekTo(lastPosition).then((value) {
-            player.play();
-            setState(() {
-              _currentPos = lastPosition;
-              _currentVideoData = videoData;
-            });
-          });
-        });
-
-        yt.close();
       } else {
-        await player
-            .setMediaFromAsset(videoData.source,
-                autoPlay: true, hwAcc: HwAcc.full)
-            .whenComplete(() async {
-          await player.seekTo(lastPosition).then((value) {
-            player.play();
-            setState(() {
-              _currentPos = lastPosition;
-              _currentVideoData = videoData;
-            });
-          });
+        await _getTracks();
+        await player.play();
+
+        setState(() {
+          _currentPos = lastPosition;
+          _currentVideoData = videoData;
         });
       }
-    });
+    } else if (videoData.sourceType == VideoSourceType.file) {
+      await player.setMediaFromFile(File(videoData.source),
+          autoPlay: true, hwAcc: HwAcc.full);
+
+      await player.seekTo(lastPosition);
+      await player.play();
+
+      setState(() {
+        _currentPos = lastPosition;
+        _currentVideoData = videoData;
+      });
+    } else if (widget.videos.first.sourceType == VideoSourceType.youtube) {
+      var yt = YoutubeExplode();
+      StreamManifest manifest =
+          await yt.videos.streamsClient.getManifest(videoData.source);
+
+      VideoStreamInfo streamInfo = manifest.muxed.withHighestBitrate();
+
+      await player.setMediaFromNetwork(streamInfo.url.toString(),
+          autoPlay: true, hwAcc: HwAcc.full);
+      await player.seekTo(lastPosition);
+      await player.play();
+
+      setState(() {
+        _currentPos = lastPosition;
+        _currentVideoData = videoData;
+      });
+
+      yt.close();
+    } else {
+      await player.setMediaFromAsset(videoData.source,
+          autoPlay: true, hwAcc: HwAcc.full);
+      await player.seekTo(lastPosition);
+      await player.play();
+
+      setState(() {
+        _currentPos = lastPosition;
+        _currentVideoData = videoData;
+      });
+    }
 
     widget.callbackOptions.onChangedQuality
         ?.call(videoData.label, videoData.source);
@@ -341,21 +331,20 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
   }
 
   void _seekTo(Duration position) async {
-    await player.pause().then((value) async {
-      setState(() {
-        _isLoading = true;
-      });
-
-      await player.seekTo(position).then((value) {
-        player.play();
-        setState(() {
-          _currentPos = position;
-          _seekPos = 0;
-        });
-
-        widget.callbackOptions.onSeek?.call(position.inMilliseconds);
-      });
+    setState(() {
+      _isLoading = true;
     });
+
+    await player.pause();
+    await player.seekTo(position);
+    await player.play();
+
+    setState(() {
+      _currentPos = position;
+      _seekPos = 0;
+    });
+
+    widget.callbackOptions.onSeek?.call(position.inMilliseconds);
   }
 
   void _seekForward() async {
@@ -405,7 +394,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     player.removeListener(_listen);
     _hideTimer?.cancel();
     _statelessTimer?.cancel();
-    ScreenBrightness().resetScreenBrightness();
+    ScreenBrightness().resetApplicationScreenBrightness();
   }
 
   void _onDoubleTap(TapDownDetails details) {

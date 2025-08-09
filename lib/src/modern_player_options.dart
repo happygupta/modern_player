@@ -61,17 +61,17 @@ class ModernPlayerVideo {
   /// )
   /// ```
   ModernPlayerVideo.single(
-      {required String source, required ModernPlayerSourceType sourceType}) {
+      {required String source, required VideoSourceType sourceType}) {
     late ModernPlayerVideoData videoData;
 
     switch (sourceType) {
-      case ModernPlayerSourceType.file:
+      case VideoSourceType.file:
         videoData = ModernPlayerVideoData.file(label: 'Default', path: source);
         break;
-      case ModernPlayerSourceType.asset:
+      case VideoSourceType.asset:
         videoData = ModernPlayerVideoData.asset(label: 'Default', path: source);
         break;
-      case ModernPlayerSourceType.youtube:
+      case VideoSourceType.youtube:
         videoData = source.contains('https') || source.contains('youtube')
             ? ModernPlayerVideoData.youtubeWithUrl(
                 label: 'Default',
@@ -129,7 +129,7 @@ class ModernPlayerVideoData {
   String source = "";
 
   /// This can define type of data source of Modern Player.
-  ModernPlayerSourceType sourceType = ModernPlayerSourceType.asset;
+  VideoSourceType sourceType = VideoSourceType.asset;
 
   ///Constructs a [ModernPlayerVideoData] playing a video from obtained from the network.
   ///
@@ -137,7 +137,7 @@ class ModernPlayerVideoData {
   ///and the [label] is displayed on quality selection on menu.
   ModernPlayerVideoData.network({required this.label, required String url}) {
     source = url;
-    sourceType = ModernPlayerSourceType.network;
+    sourceType = VideoSourceType.network;
   }
 
   ///Constructs a [ModernPlayerVideoData] playing a video from obtained from the local file.
@@ -146,7 +146,7 @@ class ModernPlayerVideoData {
   ///And the [label] is displayed on quality selection on menu.
   ModernPlayerVideoData.file({required this.label, required String path}) {
     source = path;
-    sourceType = ModernPlayerSourceType.file;
+    sourceType = VideoSourceType.file;
   }
 
   ///Constructs a [ModernPlayerVideoData] playing a video from obtained from the youtube.
@@ -162,7 +162,7 @@ class ModernPlayerVideoData {
     }
 
     source = videoId;
-    sourceType = ModernPlayerSourceType.youtube;
+    sourceType = VideoSourceType.youtube;
   }
 
   ///Constructs a [ModernPlayerVideoData] playing a video from obtained from the youtube.
@@ -172,7 +172,7 @@ class ModernPlayerVideoData {
   ModernPlayerVideoData.youtubeWithId(
       {required this.label, required String id}) {
     source = id;
-    sourceType = ModernPlayerSourceType.youtube;
+    sourceType = VideoSourceType.youtube;
   }
 
   ///Constructs a [ModernPlayerVideoData] playing a video from obtained from the assets.
@@ -181,7 +181,7 @@ class ModernPlayerVideoData {
   ///And the [label] is displayed on quality selection on menu.
   ModernPlayerVideoData.asset({required this.label, required String path}) {
     source = path;
-    sourceType = ModernPlayerSourceType.asset;
+    sourceType = VideoSourceType.asset;
   }
 
   // Get youtube video id from url
@@ -454,7 +454,7 @@ class ModernPlayerSubtitleOptions {
   /// [sourceType.network] is load subtitle from internet.
   ///
   /// [sourceType.file] is load subtitle from local file.
-  ModernPlayerSubtitleSourceType sourceType;
+  SubtitleSourceType sourceType;
 
   /// When enables, it gets selected when added
   bool? isSelected;
@@ -475,7 +475,7 @@ class ModernPlayerAudioTrackOptions {
   /// [sourceType.network] is load audio from internet.
   ///
   /// [sourceType.file] is load audio from local file.
-  ModernPlayerAudioSourceType sourceType;
+  AudioSourceType sourceType;
 
   /// When enables, it gets selected when added
   bool? isSelected;
