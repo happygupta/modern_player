@@ -138,7 +138,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   fetchQualities: true,
                 ),
                 controlsOptions: controlsOptions,
-                themeOptions: themeOptions,
+                // themeOptions: themeOptions,
               ),
             ),
             AspectRatio(
