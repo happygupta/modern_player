@@ -12,17 +12,20 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'widgets/modern_player_menus.dart';
 
 class ModernPlayerControls extends StatefulWidget {
-  const ModernPlayerControls(
-      {super.key,
-      required this.player,
-      required this.viewSize,
-      required this.videos,
-      required this.controlsOptions,
-      required this.defaultSelectionOptions,
-      required this.themeOptions,
-      required this.translationOptions,
-      required this.callbackOptions,
-      required this.selectedQuality});
+  const ModernPlayerControls({
+    super.key,
+    required this.player,
+    required this.viewSize,
+    required this.videos,
+    required this.controlsOptions,
+    required this.defaultSelectionOptions,
+    required this.themeOptions,
+    required this.translationOptions,
+    required this.callbackOptions,
+    required this.selectedQuality,
+    this.title,
+    this.subtitle,
+  });
 
   final VlcPlayerController player;
   final Size viewSize;
@@ -33,6 +36,8 @@ class ModernPlayerControls extends StatefulWidget {
   final ModernPlayerTranslationOptions translationOptions;
   final ModernPlayerCallbackOptions callbackOptions;
   final ModernPlayerVideoData selectedQuality;
+  final String? title;
+  final String? subtitle;
 
   @override
   State<ModernPlayerControls> createState() => _ModernPlayerControlsState();
@@ -52,6 +57,8 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
   bool _dragRight = false;
 
   bool _isLoading = true;
+  bool _isBuffering = false;
+  bool _wasBuffering = false;
   bool _isDisposed = false;
 
   double? _brightness;
@@ -120,6 +127,23 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
         _duration = player.value.duration;
       }
 
+      // Comprehensive buffering detection like video_player_page.dart
+      final playingState = player.value.playingState;
+      final bufferPercent = player.value.bufferPercent;
+
+      final isCurrentlyBuffering = playingState == PlayingState.buffering ||
+          playingState == PlayingState.initializing ||
+          (playingState == PlayingState.playing &&
+              bufferPercent < 100 &&
+              bufferPercent > 0);
+
+      // Only update buffering state if it changed to reduce unnecessary rebuilds
+      bool shouldUpdateBuffering = false;
+      if (_isBuffering != isCurrentlyBuffering) {
+        _wasBuffering = _isBuffering;
+        shouldUpdateBuffering = true;
+      }
+
       if (player.value.playingState == PlayingState.playing &&
           _isLoading &&
           player.value.playingState != PlayingState.initializing &&
@@ -130,6 +154,13 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
 
         setState(() {
           _isLoading = false;
+        });
+      }
+
+      // Update buffering state if needed
+      if (shouldUpdateBuffering) {
+        setState(() {
+          _isBuffering = isCurrentlyBuffering;
         });
       }
     }
@@ -478,6 +509,59 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     setState(() {});
   }
 
+  Widget _buildBufferingOverlay() {
+    final bufferPercent = widget.player.value.bufferPercent;
+
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.3),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              widget.themeOptions.customLoadingWidget ??
+                  SizedBox(
+                    height: 50,
+                    width: 50,
+                    child: CircularProgressIndicator(
+                      color: widget.themeOptions.loadingColor ??
+                          Colors.greenAccent,
+                      strokeCap: StrokeCap.round,
+                    ),
+                  ),
+              const SizedBox(height: 16),
+              if (_isBuffering)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'Buffering...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (bufferPercent > 0 && bufferPercent < 100) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '${bufferPercent.toInt()}%',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
@@ -526,6 +610,43 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                                               Icons.arrow_back_ios_new_rounded,
                                               color: Colors.white,
                                             ),
+                                      ),
+                                    ),
+                                  ),
+                                // Title and Subtitle Display
+                                if (widget.title != null ||
+                                    widget.subtitle != null)
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (widget.title != null)
+                                            Text(
+                                              widget.title!,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          if (widget.subtitle != null)
+                                            Text(
+                                              widget.subtitle!,
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 14,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -682,21 +803,24 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                   ),
                 ),
         ),
-        if (_isLoading)
-          Positioned.fill(
-            child: Center(
-              child: widget.themeOptions.customLoadingWidget ??
-                  SizedBox(
-                    height: 50,
-                    width: 50,
-                    child: CircularProgressIndicator(
-                      color: widget.themeOptions.loadingColor ??
-                          Colors.greenAccent,
-                      strokeCap: StrokeCap.round,
-                    ),
-                  ),
-            ),
-          )
+        // Initial loading indicator
+        // if (_isLoading)
+        //   Positioned.fill(
+        //     child: Center(
+        //       child: widget.themeOptions.customLoadingWidget ??
+        //           SizedBox(
+        //             height: 50,
+        //             width: 50,
+        //             child: CircularProgressIndicator(
+        //               color: widget.themeOptions.loadingColor ??
+        //                   Colors.greenAccent,
+        //               strokeCap: StrokeCap.round,
+        //             ),
+        //           ),
+        //     ),
+        //   ),
+        // Buffering overlay - shows when video is initialized but buffering
+        if (_isLoading || _isBuffering) _buildBufferingOverlay(),
       ],
     ));
   }

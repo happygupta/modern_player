@@ -16,16 +16,19 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 /// To customize video player controls or theme you can add [controlsOptions] and [themeOptions]
 /// when calling [createPlayer]
 class ModernPlayer extends StatefulWidget {
-  const ModernPlayer._(
-      {required this.video,
-      required this.subtitles,
-      required this.audioTracks,
-      this.defaultSelectionOptions,
-      this.options,
-      this.controlsOptions,
-      this.themeOptions,
-      this.translationOptions,
-      this.callbackOptions});
+  const ModernPlayer._({
+    required this.video,
+    required this.subtitles,
+    required this.audioTracks,
+    this.defaultSelectionOptions,
+    this.options,
+    this.controlsOptions,
+    this.themeOptions,
+    this.translationOptions,
+    this.callbackOptions,
+    this.title,
+    this.subtitle,
+  });
 
   /// Video quality options for multiple qualities. If you have only one quality video just add one in list.
   final ModernPlayerVideo video;
@@ -56,16 +59,25 @@ class ModernPlayer extends StatefulWidget {
   /// With [callbackOptions] option you can perform custom actions on callback.
   final ModernPlayerCallbackOptions? callbackOptions;
 
-  static Widget createPlayer(
-      {required ModernPlayerVideo video,
-      List<ModernPlayerSubtitleOptions>? subtitles,
-      List<ModernPlayerAudioTrackOptions>? audioTracks,
-      ModernPlayerDefaultSelectionOptions? defaultSelectionOptions,
-      ModernPlayerOptions? options,
-      ModernPlayerControlsOptions? controlsOptions,
-      ModernPlayerThemeOptions? themeOptions,
-      ModernPlayerTranslationOptions? translationOptions,
-      ModernPlayerCallbackOptions? callbackOptions}) {
+  /// Video title to display in the player controls.
+  final String? title;
+
+  /// Video subtitle to display in the player controls.
+  final String? subtitle;
+
+  static Widget createPlayer({
+    required ModernPlayerVideo video,
+    List<ModernPlayerSubtitleOptions>? subtitles,
+    List<ModernPlayerAudioTrackOptions>? audioTracks,
+    ModernPlayerDefaultSelectionOptions? defaultSelectionOptions,
+    ModernPlayerOptions? options,
+    ModernPlayerControlsOptions? controlsOptions,
+    ModernPlayerThemeOptions? themeOptions,
+    ModernPlayerTranslationOptions? translationOptions,
+    ModernPlayerCallbackOptions? callbackOptions,
+    String? title,
+    String? subtitle,
+  }) {
     return ModernPlayer._(
       video: video,
       subtitles: subtitles ?? [],
@@ -76,6 +88,8 @@ class ModernPlayer extends StatefulWidget {
       themeOptions: themeOptions,
       translationOptions: translationOptions,
       callbackOptions: callbackOptions,
+      title: title,
+      subtitle: subtitle,
     );
   }
 
@@ -88,6 +102,8 @@ class _ModernPlayerState extends State<ModernPlayer> {
 
   bool isDisposed = false;
   bool canDisplayVideo = false;
+  bool _isBuffering = false;
+  bool _wasBuffering = false;
 
   double visibilityFraction = 1;
   String? youtubeId;
@@ -195,6 +211,7 @@ class _ModernPlayerState extends State<ModernPlayer> {
 
     _playerController.addOnInitListener(_onInitialize);
     _playerController.addListener(_checkVideoLoaded);
+    _playerController.addListener(_checkBufferingState);
 
     setState(() {
       canDisplayVideo = true;
@@ -286,6 +303,28 @@ class _ModernPlayerState extends State<ModernPlayer> {
     }
   }
 
+  void _checkBufferingState() {
+    if (_playerController.value.isInitialized && !isDisposed) {
+      final playingState = _playerController.value.playingState;
+      final bufferPercent = _playerController.value.bufferPercent;
+
+      // Comprehensive buffering detection like video_player_page.dart
+      final isCurrentlyBuffering = playingState == PlayingState.buffering ||
+          playingState == PlayingState.initializing ||
+          (playingState == PlayingState.playing &&
+              bufferPercent < 100 &&
+              bufferPercent > 0);
+
+      // Only update state if buffering status changed to reduce unnecessary rebuilds
+      if (_isBuffering != isCurrentlyBuffering) {
+        _wasBuffering = _isBuffering;
+        setState(() {
+          _isBuffering = isCurrentlyBuffering;
+        });
+      }
+    }
+  }
+
   void _onChangeVisibility(double visibility) {
     visibilityFraction = visibility;
     _checkPlayPause();
@@ -311,6 +350,7 @@ class _ModernPlayerState extends State<ModernPlayer> {
     }
 
     _playerController.removeListener(_checkVideoLoaded);
+    _playerController.removeListener(_checkBufferingState);
     _playerController.removeOnInitListener(_onInitialize);
 
     if (widget.options?.allowScreenSleep ?? false == false) {
@@ -357,20 +397,60 @@ class _ModernPlayerState extends State<ModernPlayer> {
                   callbackOptions:
                       widget.callbackOptions ?? ModernPlayerCallbackOptions(),
                   selectedQuality: selectedQuality,
-                )
+                  title: widget.title,
+                  subtitle: widget.subtitle,
+                ),
+              // Buffering overlay - shows when video is initialized but buffering
+              // if (_playerController.value.isInitialized && _isBuffering)
+              //   _buildBufferingOverlay(),
             ],
           )
-        : Center(
-            child: SizedBox(
-              height: 50,
-              width: 50,
-              child: widget.themeOptions?.customLoadingWidget ??
-                  CircularProgressIndicator(
-                    color:
-                        widget.themeOptions?.loadingColor ?? Colors.greenAccent,
-                    strokeCap: StrokeCap.round,
+        : _buildBufferingOverlay();
+  }
+
+  Widget _buildBufferingOverlay() {
+    final bufferPercent = _playerController.value.bufferPercent;
+
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.3),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              widget.themeOptions?.customLoadingWidget ??
+                  SizedBox(
+                    height: 50,
+                    width: 50,
+                    child: CircularProgressIndicator(
+                      color: widget.themeOptions?.loadingColor ??
+                          Colors.greenAccent,
+                      strokeCap: StrokeCap.round,
+                    ),
                   ),
-            ),
-          );
+              const SizedBox(height: 16),
+              const Text(
+                'Buffering...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (bufferPercent > 0 && bufferPercent < 100) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '${bufferPercent.toInt()}%',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
