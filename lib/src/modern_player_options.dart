@@ -580,6 +580,10 @@ class ModernPlayerCallbackOptions {
   /// [onMutePressed] calls when user clicked mute button.
   Function? onMutePressed;
 
+  /// Callback to listen for bottom sheet state changes.
+  /// Returns true when bottom sheet is open, false when closed.
+  Function(bool isOpen)? onBottomSheetStateChanged;
+
   ModernPlayerCallbackOptions(
       {this.onPlay,
       this.onPause,
@@ -592,5 +596,6 @@ class ModernPlayerCallbackOptions {
       this.onChangedPlaybackSpeed,
       this.onBackPressed,
       this.onMenuPressed,
-      this.onMutePressed});
+      this.onMutePressed,
+      this.onBottomSheetStateChanged});
 }
