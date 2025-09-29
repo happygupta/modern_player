@@ -50,16 +50,6 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
 
   Timer? _statelessTimer;
 
-  /// Debounce timers for preventing rapid clicks
-  Timer? _playPauseDebounceTimer;
-  Timer? _seekForwardDebounceTimer;
-  Timer? _seekBackwardDebounceTimer;
-  Timer? _doubleTapDebounceTimer;
-  Timer? _seekToDebounceTimer;
-
-  /// Debounce duration for all methods
-  static const Duration _debounceDuration = Duration(milliseconds: 300);
-
   Duration _duration = const Duration();
   Duration _currentPos = const Duration();
 
@@ -246,25 +236,19 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
 
   /// Toggle between play and pause
   void _playOrPause() async {
-    // Cancel any existing debounce timer
-    _playPauseDebounceTimer?.cancel();
+    if (await player.isPlaying() ?? false) {
+      setState(() {
+        player.pause();
+      });
 
-    // Set up new debounce timer
-    _playPauseDebounceTimer = Timer(_debounceDuration, () async {
-      if (await player.isPlaying() ?? false) {
-        setState(() {
-          player.pause();
-        });
+      widget.callbackOptions.onPause?.call();
+    } else {
+      setState(() {
+        player.play();
+      });
 
-        widget.callbackOptions.onPause?.call();
-      } else {
-        setState(() {
-          player.play();
-        });
-
-        widget.callbackOptions.onPlay?.call();
-      }
-    });
+      widget.callbackOptions.onPlay?.call();
+    }
   }
 
   void _startHideTimer() {
@@ -378,76 +362,58 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
   }
 
   void _seekTo(Duration position) async {
-    // Cancel any existing debounce timer
-    _seekToDebounceTimer?.cancel();
+    setState(() {
+      _isLoading = true;
+    });
 
-    // Set up new debounce timer
-    _seekToDebounceTimer = Timer(_debounceDuration, () async {
+    await player.pause();
+    await player.seekTo(position);
+    await player.play();
+
+    setState(() {
+      _currentPos = position;
+      _seekPos = 0;
+    });
+
+    widget.callbackOptions.onSeek?.call(position.inMilliseconds);
+  }
+
+  void _seekForward() async {
+    int positionInSeconds = player.value.position.inSeconds + 10;
+
+    await player.pause().then((value) async {
       setState(() {
         _isLoading = true;
       });
 
-      await player.pause();
-      await player.seekTo(position);
-      await player.play();
-
-      setState(() {
-        _currentPos = position;
-        _seekPos = 0;
-      });
-
-      widget.callbackOptions.onSeek?.call(position.inMilliseconds);
-    });
-  }
-
-  void _seekForward() async {
-    // Cancel any existing debounce timer
-    _seekForwardDebounceTimer?.cancel();
-
-    // Set up new debounce timer
-    _seekForwardDebounceTimer = Timer(_debounceDuration, () async {
-      int positionInSeconds = player.value.position.inSeconds + 10;
-
-      await player.pause().then((value) async {
+      await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
+        player.play();
         setState(() {
-          _isLoading = true;
+          _currentPos = Duration(seconds: positionInSeconds);
+          _seekPos = 0;
         });
 
-        await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
-          player.play();
-          setState(() {
-            _currentPos = Duration(seconds: positionInSeconds);
-            _seekPos = 0;
-          });
-
-          widget.callbackOptions.onSeekForward?.call();
-        });
+        widget.callbackOptions.onSeekForward?.call();
       });
     });
   }
 
   void _seekBackward() async {
-    // Cancel any existing debounce timer
-    _seekBackwardDebounceTimer?.cancel();
+    int positionInSeconds = player.value.position.inSeconds - 10;
 
-    // Set up new debounce timer
-    _seekBackwardDebounceTimer = Timer(_debounceDuration, () async {
-      int positionInSeconds = player.value.position.inSeconds - 10;
+    await player.pause().then((value) async {
+      setState(() {
+        _isLoading = true;
+      });
 
-      await player.pause().then((value) async {
+      await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
+        player.play();
         setState(() {
-          _isLoading = true;
+          _currentPos = Duration(seconds: positionInSeconds);
+          _seekPos = 0;
         });
 
-        await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
-          player.play();
-          setState(() {
-            _currentPos = Duration(seconds: positionInSeconds);
-            _seekPos = 0;
-          });
-
-          widget.callbackOptions.onSeekBackward?.call();
-        });
+        widget.callbackOptions.onSeekBackward?.call();
       });
     });
   }
@@ -459,31 +425,17 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     player.removeListener(_listen);
     _hideTimer?.cancel();
     _statelessTimer?.cancel();
-
-    // Cancel all debounce timers
-    _playPauseDebounceTimer?.cancel();
-    _seekForwardDebounceTimer?.cancel();
-    _seekBackwardDebounceTimer?.cancel();
-    _doubleTapDebounceTimer?.cancel();
-    _seekToDebounceTimer?.cancel();
-
     ScreenBrightness().resetApplicationScreenBrightness();
   }
 
   void _onDoubleTap(TapDownDetails details) {
-    // Cancel any existing debounce timer
-    _doubleTapDebounceTimer?.cancel();
-
-    // Set up new debounce timer
-    _doubleTapDebounceTimer = Timer(_debounceDuration, () {
-      if (widget.controlsOptions.doubleTapToSeek) {
-        if (details.localPosition.dx > widget.viewSize.width / 2) {
-          _seekForward();
-        } else {
-          _seekBackward();
-        }
+    if (widget.controlsOptions.doubleTapToSeek) {
+      if (details.localPosition.dx > widget.viewSize.width / 2) {
+        _seekForward();
+      } else {
+        _seekBackward();
       }
-    });
+    }
   }
 
   void onVerticalDragStartFun(DragStartDetails d) {

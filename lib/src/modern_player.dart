@@ -17,7 +17,6 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 /// when calling [createPlayer]
 class ModernPlayer extends StatefulWidget {
   const ModernPlayer._({
-    super.key,
     required this.video,
     required this.subtitles,
     required this.audioTracks,
@@ -67,7 +66,6 @@ class ModernPlayer extends StatefulWidget {
   final String? subtitle;
 
   static Widget createPlayer({
-    Key? key,
     required ModernPlayerVideo video,
     List<ModernPlayerSubtitleOptions>? subtitles,
     List<ModernPlayerAudioTrackOptions>? audioTracks,
@@ -81,7 +79,6 @@ class ModernPlayer extends StatefulWidget {
     String? subtitle,
   }) {
     return ModernPlayer._(
-      key: key,
       video: video,
       subtitles: subtitles ?? [],
       audioTracks: audioTracks ?? [],
@@ -114,11 +111,6 @@ class _ModernPlayerState extends State<ModernPlayer> {
   late ModernPlayerVideoData selectedQuality;
 
   List<ModernPlayerVideoData> videosData = List.empty(growable: true);
-
-  // Bottom sheet state management
-  bool _isBottomSheetOpen = false;
-  bool _wasPausedByBottomSheet = false;
-  bool _wasPlayingBeforeBottomSheet = false;
 
   @override
   void initState() {
@@ -348,40 +340,6 @@ class _ModernPlayerState extends State<ModernPlayer> {
         _playerController.play();
       }
     }
-  }
-
-  /// Handles bottom sheet state changes and manages video pause/resume accordingly
-  void _handleBottomSheetStateChange(bool isOpen) {
-    if (!_playerController.value.isInitialized || isDisposed) return;
-
-    setState(() {
-      _isBottomSheetOpen = isOpen;
-    });
-
-    if (isOpen) {
-      // Bottom sheet opened - pause video if it's playing
-      if (_playerController.value.isPlaying) {
-        _wasPlayingBeforeBottomSheet = true;
-        _wasPausedByBottomSheet = true;
-        _playerController.pause();
-      } else {
-        _wasPlayingBeforeBottomSheet = false;
-        _wasPausedByBottomSheet = false;
-      }
-    } else {
-      // Bottom sheet closed - resume video if it was paused by bottom sheet
-      if (_wasPausedByBottomSheet && _wasPlayingBeforeBottomSheet) {
-        _playerController.play();
-      }
-      // Reset flags
-      _wasPausedByBottomSheet = false;
-      _wasPlayingBeforeBottomSheet = false;
-    }
-  }
-
-  /// Public method to update bottom sheet state from external sources
-  void updateBottomSheetState(bool isOpen) {
-    _handleBottomSheetStateChange(isOpen);
   }
 
   @override
