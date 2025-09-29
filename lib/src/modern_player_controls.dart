@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:modern_player/modern_player.dart';
@@ -57,27 +56,6 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
   Timer? _seekBackwardDebounceTimer;
   Timer? _doubleTapDebounceTimer;
   Timer? _seekToDebounceTimer;
-
-  /// Loading timeout timer to prevent indefinite loading states
-  Timer? _loadingTimeoutTimer;
-
-  /// Original playback state preservation for consistent behavior across multiple clicks
-  bool? _originalPlaybackState;
-
-  /// Operation state tracking to prevent multiple simultaneous operations
-  bool _isPlayPauseOperating = false;
-  bool _isSeekOperating = false;
-  bool _isSeekForwardOperating = false;
-  bool _isSeekBackwardOperating = false;
-
-  /// Timing-based click restriction variables for microsecond-level detection
-  DateTime? _lastPlayPauseTime;
-  DateTime? _lastSeekTime;
-  DateTime? _lastSeekForwardTime;
-  DateTime? _lastSeekBackwardTime;
-
-  /// Minimum interval between operations (in microseconds) to prevent rapid clicks
-  static const int _minOperationIntervalMicroseconds = 100000; // 100ms
 
   /// Debounce duration for all methods
   static const Duration _debounceDuration = Duration(milliseconds: 300);
@@ -176,30 +154,17 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
         shouldUpdateBuffering = true;
       }
 
-      // Improved loading state reset logic
-      if (_isLoading) {
-        final playingState = player.value.playingState;
-        final bufferPercent = player.value.bufferPercent;
-
-        // Reset loading state when:
-        // 1. Player is playing and well buffered (original condition)
-        // 2. Player is paused (user might have paused during seek)
-        // 3. Player has been buffering for too long (fallback)
-        final shouldResetLoading =
-            (playingState == PlayingState.playing && bufferPercent >= 100) ||
-                playingState == PlayingState.paused ||
-                playingState == PlayingState.stopped ||
-                playingState == PlayingState.ended;
-
-        if (shouldResetLoading) {
-          if (_audioTracks == null && _subtitleTracks == null) {
-            _getTracks();
-          }
-
-          setState(() {
-            _isLoading = false;
-          });
+      if (player.value.playingState == PlayingState.playing &&
+          _isLoading &&
+          player.value.playingState != PlayingState.initializing &&
+          player.value.bufferPercent >= 100) {
+        if (_audioTracks == null && _subtitleTracks == null) {
+          _getTracks();
         }
+
+        setState(() {
+          _isLoading = false;
+        });
       }
 
       // Update buffering state if needed
@@ -281,30 +246,25 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
 
   /// Toggle between play and pause
   void _playOrPause() async {
-    await _executeWithRestriction(
-      operationType: 'playPause',
-      operation: () async {
-        // Cancel any existing debounce timer
-        _playPauseDebounceTimer?.cancel();
+    // Cancel any existing debounce timer
+    _playPauseDebounceTimer?.cancel();
 
-        // Set up new debounce timer
-        _playPauseDebounceTimer = Timer(_debounceDuration, () async {
-          if (await player.isPlaying() ?? false) {
-            setState(() {
-              player.pause();
-            });
-
-            widget.callbackOptions.onPause?.call();
-          } else {
-            setState(() {
-              player.play();
-            });
-
-            widget.callbackOptions.onPlay?.call();
-          }
+    // Set up new debounce timer
+    _playPauseDebounceTimer = Timer(_debounceDuration, () async {
+      if (await player.isPlaying() ?? false) {
+        setState(() {
+          player.pause();
         });
-      },
-    );
+
+        widget.callbackOptions.onPause?.call();
+      } else {
+        setState(() {
+          player.play();
+        });
+
+        widget.callbackOptions.onPlay?.call();
+      }
+    });
   }
 
   void _startHideTimer() {
@@ -417,401 +377,79 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     widget.callbackOptions.onChangedAudio?.call(subtitle.key);
   }
 
-  /// Captures the original playback state before any seek operation
-  /// This ensures the video will be set to playing state after seek completion
-  Future<void> _captureOriginalPlaybackState() async {
-    if (_originalPlaybackState == null) {
-      try {
-        // Validate player state before capturing
-        if (!_isPlayerValid()) {
-          debugPrint(
-              'Player is not in a valid state for capturing playback state');
-          _originalPlaybackState = true; // Default to playing state
-          return;
-        }
+  void _seekTo(Duration position) async {
+    // Cancel any existing debounce timer
+    _seekToDebounceTimer?.cancel();
 
-        // Always capture the current state, but we'll restore to playing
-        _originalPlaybackState = await player.isPlaying() ?? false;
-      } catch (e) {
-        debugPrint('Failed to capture original playback state: $e');
-        _originalPlaybackState = true; // Default to playing state
-      }
-    }
-  }
+    // Set up new debounce timer
+    _seekToDebounceTimer = Timer(_debounceDuration, () async {
+      setState(() {
+        _isLoading = true;
+      });
 
-  /// Validates if the player is in a valid state for operations
-  bool _isPlayerValid() {
-    try {
-      // Check if player is disposed or not initialized
-      if (_isDisposed || !mounted) return false;
+      await player.pause();
+      await player.seekTo(position);
+      await player.play();
 
-      // Check if player has valid duration (indicates media is loaded)
-      final duration = player.value.duration;
-      if (duration == Duration.zero) return false;
+      setState(() {
+        _currentPos = position;
+        _seekPos = 0;
+      });
 
-      return true;
-    } catch (e) {
-      debugPrint('Player validation failed: $e');
-      return false;
-    }
-  }
-
-  /// Generic method to execute operations with click restriction
-  Future<void> _executeWithRestriction({
-    required String operationType,
-    required Future<void> Function() operation,
-    Duration? customTimeout,
-  }) async {
-    final now = DateTime.now();
-    
-    // Get the appropriate operation flag
-    bool isOperating = _getOperationState(operationType);
-
-    // Prevent multiple simultaneous operations
-    if (isOperating) {
-      debugPrint(
-          '$operationType operation already in progress, ignoring click');
-      return;
-    }
-
-    // Check timing-based restriction to prevent rapid clicks
-    DateTime? lastOperationTime = _getLastOperationTime(operationType);
-    if (lastOperationTime != null) {
-      final timeDifference = now.difference(lastOperationTime).inMicroseconds;
-      if (timeDifference < _minOperationIntervalMicroseconds) {
-        debugPrint(
-            '$operationType operation blocked: only ${timeDifference}μs since last operation (minimum: ${_minOperationIntervalMicroseconds}μs)');
-        return;
-      }
-    }
-
-    // Update last operation time
-    _setLastOperationTime(operationType, now);
-
-    try {
-      // Set operation state to true
-      _setOperationState(operationType, true);
-
-      // Execute the operation with timeout
-      await operation().timeout(
-        customTimeout ?? const Duration(seconds: 5),
-        onTimeout: () {
-          debugPrint('$operationType operation timed out');
-          throw TimeoutException('$operationType operation timed out',
-              customTimeout ?? const Duration(seconds: 5));
-        },
-      );
-    } catch (e) {
-      debugPrint('$operationType operation failed: $e');
-      rethrow;
-    } finally {
-      // Always reset operation state
-      _setOperationState(operationType, false);
-    }
-  }
-
-  /// Get operation state for a specific operation type
-  bool _getOperationState(String operationType) {
-    switch (operationType) {
-      case 'playPause':
-        return _isPlayPauseOperating;
-      case 'seek':
-        return _isSeekOperating;
-      case 'seekForward':
-        return _isSeekForwardOperating;
-      case 'seekBackward':
-        return _isSeekBackwardOperating;
-      default:
-        return false;
-    }
-  }
-
-  /// Set operation state for a specific operation type
-  void _setOperationState(String operationType, bool value) {
-    if (!mounted) return;
-
-    setState(() {
-      switch (operationType) {
-        case 'playPause':
-          _isPlayPauseOperating = value;
-          break;
-        case 'seek':
-          _isSeekOperating = value;
-          break;
-        case 'seekForward':
-          _isSeekForwardOperating = value;
-          break;
-        case 'seekBackward':
-          _isSeekBackwardOperating = value;
-          break;
-      }
+      widget.callbackOptions.onSeek?.call(position.inMilliseconds);
     });
   }
 
-  /// Get last operation time for a specific operation type
-  DateTime? _getLastOperationTime(String operationType) {
-    switch (operationType) {
-      case 'playPause':
-        return _lastPlayPauseTime;
-      case 'seek':
-        return _lastSeekTime;
-      case 'seekForward':
-        return _lastSeekForwardTime;
-      case 'seekBackward':
-        return _lastSeekBackwardTime;
-      default:
-        return null;
-    }
-  }
-
-  /// Set last operation time for a specific operation type
-  void _setLastOperationTime(String operationType, DateTime time) {
-    switch (operationType) {
-      case 'playPause':
-        _lastPlayPauseTime = time;
-        break;
-      case 'seek':
-        _lastSeekTime = time;
-        break;
-      case 'seekForward':
-        _lastSeekForwardTime = time;
-        break;
-      case 'seekBackward':
-        _lastSeekBackwardTime = time;
-        break;
-    }
-  }
-
-  /// Restores the video to playing state after seek operations complete
-  /// This method ensures the video is always set to playing state after seek
-  Future<void> _restoreOriginalPlaybackState() async {
-    if (_originalPlaybackState == null) return;
-
-    try {
-      // Validate player state before attempting restoration
-      if (!_isPlayerValid()) {
-        debugPrint(
-            'Player is not in a valid state for restoring playback state');
-        _originalPlaybackState = null;
-        return;
-      }
-
-      final currentlyPlaying = await player.isPlaying() ?? false;
-
-      // Always set to playing state after seek operations
-      if (!currentlyPlaying) {
-        debugPrint('Setting video to playing state after seek');
-        await player.play().timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            throw TimeoutException(
-                'Play operation timed out during state restoration',
-                const Duration(seconds: 3));
-          },
-        );
-
-        // Verify the state change was successful
-        await Future.delayed(const Duration(milliseconds: 50));
-        final isNowPlaying = await player.isPlaying() ?? false;
-        if (!isNowPlaying) {
-          debugPrint('Warning: Play command may not have taken effect');
-        }
-      } else {
-        debugPrint('Video is already playing after seek');
-      }
-
-      // Clear the captured state after successful restoration
-      _originalPlaybackState = null;
-    } catch (e) {
-      debugPrint('Failed to restore playback state: $e');
-      // Clear state even on error to prevent stuck states
-      _originalPlaybackState = null;
-    }
-  }
-
-  void _seekTo(Duration position) async {
-    await _executeWithRestriction(
-      operationType: 'seek',
-      operation: () async {
-        // Capture original playback state before any debouncing
-        await _captureOriginalPlaybackState();
-
-        // Cancel any existing debounce timer
-        _seekToDebounceTimer?.cancel();
-
-        // Set up new debounce timer
-        _seekToDebounceTimer = Timer(_debounceDuration, () async {
-          await _performSeekOperation(
-            targetPosition: position,
-            onSuccess: () {
-              widget.callbackOptions.onSeek?.call(position.inMilliseconds);
-            },
-          );
-        });
-      },
-    );
-  }
-
   void _seekForward() async {
-    await _executeWithRestriction(
-      operationType: 'seekForward',
-      operation: () async {
-        // Capture original playback state before any debouncing
-        await _captureOriginalPlaybackState();
+    // Cancel any existing debounce timer
+    _seekForwardDebounceTimer?.cancel();
 
-        // Cancel any existing debounce timer
-        _seekForwardDebounceTimer?.cancel();
+    // Set up new debounce timer
+    _seekForwardDebounceTimer = Timer(_debounceDuration, () async {
+      int positionInSeconds = player.value.position.inSeconds + 10;
 
-        // Set up new debounce timer
-        _seekForwardDebounceTimer = Timer(_debounceDuration, () async {
-          final currentPosition = player.value.position.inSeconds;
-          final targetPosition = Duration(seconds: currentPosition + 10);
-
-          await _performSeekOperation(
-            targetPosition: targetPosition,
-            onSuccess: () {
-              widget.callbackOptions.onSeekForward?.call();
-            },
-          );
-        });
-      },
-    );
-  }
-
-  void _seekBackward() async {
-    await _executeWithRestriction(
-      operationType: 'seekBackward',
-      operation: () async {
-        // Capture original playback state before any debouncing
-        await _captureOriginalPlaybackState();
-
-        // Cancel any existing debounce timer
-        _seekBackwardDebounceTimer?.cancel();
-
-        // Set up new debounce timer
-        _seekBackwardDebounceTimer = Timer(_debounceDuration, () async {
-          final currentPosition = player.value.position.inSeconds;
-          final targetPosition =
-              Duration(seconds: math.max(0, currentPosition - 10));
-
-          await _performSeekOperation(
-            targetPosition: targetPosition,
-            onSuccess: () {
-              widget.callbackOptions.onSeekBackward?.call();
-            },
-          );
-        });
-      },
-    );
-  }
-
-  /// Centralized seek operation with robust error handling and timeout protection
-  Future<void> _performSeekOperation({
-    required Duration targetPosition,
-    VoidCallback? onSuccess,
-  }) async {
-    if (_isDisposed || !player.value.isInitialized) {
-      return;
-    }
-
-    // Validate target position
-    final clampedPosition = Duration(
-      milliseconds: targetPosition.inMilliseconds.clamp(
-        0,
-        _duration.inMilliseconds,
-      ),
-    );
-
-    try {
-      // Set loading state
-      if (mounted) {
+      await player.pause().then((value) async {
         setState(() {
           _isLoading = true;
         });
-      }
 
-      // Set up loading timeout as a safety net
-      _loadingTimeoutTimer?.cancel();
-      _loadingTimeoutTimer = Timer(const Duration(seconds: 10), () {
-        if (mounted && !_isDisposed && _isLoading) {
-          debugPrint('Loading timeout reached, forcing loading state reset');
+        await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
+          player.play();
           setState(() {
-            _isLoading = false;
+            _currentPos = Duration(seconds: positionInSeconds);
+            _seekPos = 0;
           });
-        }
-      });
 
-      // Pause player before seeking (state is already captured)
-      await player.pause().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {
-          throw TimeoutException(
-              'Pause operation timed out', const Duration(seconds: 2));
-        },
-      );
-
-      // Perform seek operation with timeout
-      await player.seekTo(clampedPosition).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          throw TimeoutException(
-              'Seek operation timed out', const Duration(seconds: 5));
-        },
-      );
-
-      // Update position immediately for UI responsiveness
-      if (mounted) {
-        setState(() {
-          _currentPos = clampedPosition;
-          _seekPos = 0;
+          widget.callbackOptions.onSeekForward?.call();
         });
-      }
+      });
+    });
+  }
 
-      // Add a brief delay before state restoration to ensure seek operation completes
-      // This prevents timing conflicts and ensures optimal performance
-      await Future.delayed(const Duration(milliseconds: 100));
+  void _seekBackward() async {
+    // Cancel any existing debounce timer
+    _seekBackwardDebounceTimer?.cancel();
 
-      // Restore original playback state
-      await _restoreOriginalPlaybackState();
+    // Set up new debounce timer
+    _seekBackwardDebounceTimer = Timer(_debounceDuration, () async {
+      int positionInSeconds = player.value.position.inSeconds - 10;
 
-      // Cancel loading timeout timer since operation completed successfully
-      _loadingTimeoutTimer?.cancel();
+      await player.pause().then((value) async {
+        setState(() {
+          _isLoading = true;
+        });
 
-      // Reset loading state with a slight delay to ensure smooth transition
-      Timer(const Duration(milliseconds: 500), () {
-        if (mounted && !_isDisposed) {
+        await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
+          player.play();
           setState(() {
-            _isLoading = false;
+            _currentPos = Duration(seconds: positionInSeconds);
+            _seekPos = 0;
           });
-        }
-      });
 
-      // Call success callback
-      onSuccess?.call();
-    } catch (e) {
-      // Handle errors gracefully
-      debugPrint('Seek operation failed: $e');
-
-      // Cancel loading timeout timer
-      _loadingTimeoutTimer?.cancel();
-
-      // Reset loading state on error
-      if (mounted && !_isDisposed) {
-        setState(() {
-          _isLoading = false;
+          widget.callbackOptions.onSeekBackward?.call();
         });
-      }
-
-      // Try to restore original playback state even on error
-      try {
-        // Add the same delay for consistency
-        await Future.delayed(const Duration(milliseconds: 100));
-        await _restoreOriginalPlaybackState();
-      } catch (restoreError) {
-        debugPrint(
-            'Failed to restore playback state after seek error: $restoreError');
-      }
-    }
+      });
+    });
   }
 
   @override
@@ -828,9 +466,6 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     _seekBackwardDebounceTimer?.cancel();
     _doubleTapDebounceTimer?.cancel();
     _seekToDebounceTimer?.cancel();
-
-    // Cancel loading timeout timer
-    _loadingTimeoutTimer?.cancel();
 
     ScreenBrightness().resetApplicationScreenBrightness();
   }
@@ -1287,37 +922,30 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                   SizedBox(
                     width: 40,
                     child: IconButton(
-                      onPressed: _isSeekBackwardOperating
-                          ? null
-                          : () {
-                              _startHideTimer();
-                              _seekBackward();
-                            },
+                      onPressed: () {
+                        _startHideTimer();
+                        _seekBackward();
+                      },
                       icon: const Icon(
                         Icons.replay_10_rounded,
                         size: 20,
                       ),
-                      color: _isSeekBackwardOperating
-                          ? Colors.white54
-                          : Colors.white,
+                      color: Colors.white,
                     ),
                   ),
                 SizedBox(
                   width: 40,
                   child: GestureDetector(
-                    onTap: _isPlayPauseOperating
-                        ? null
-                        : () {
-                            _startHideTimer();
-                            _playOrPause();
-                          },
+                    onTap: () {
+                      _startHideTimer();
+                      _playOrPause();
+                    },
                     child: Icon(
                       player.value.isPlaying
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
                       size: 36,
-                      color:
-                          _isPlayPauseOperating ? Colors.white54 : Colors.white,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -1326,19 +954,15 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                   SizedBox(
                     width: 40,
                     child: IconButton(
-                      onPressed: _isSeekForwardOperating
-                          ? null
-                          : () {
-                              _startHideTimer();
-                              _seekForward();
-                            },
+                      onPressed: () {
+                        _startHideTimer();
+                        _seekForward();
+                      },
                       icon: const Icon(
                         Icons.forward_10_rounded,
                         size: 20,
                       ),
-                      color: _isSeekForwardOperating
-                          ? Colors.white54
-                          : Colors.white,
+                      color: Colors.white,
                     ),
                   ),
                 const SizedBox(
@@ -1378,19 +1002,15 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                     value: currentValue.toDouble(),
                     min: 0,
                     max: duration.toDouble(),
-                    onChanged: _isSeekOperating
-                        ? null
-                        : (value) {
-                            _startHideTimer();
-                            setState(() {
-                              _seekPos = value.toInt();
-                            });
-                          },
-                    onChangeEnd: _isSeekOperating
-                        ? null
-                        : (value) {
-                            _seekTo(Duration(seconds: value.toInt()));
-                          },
+                    onChanged: (value) {
+                      _startHideTimer();
+                      setState(() {
+                        _seekPos = value.toInt();
+                      });
+                    },
+                    onChangeEnd: (value) {
+                      _seekTo(Duration(seconds: value.toInt()));
+                    },
                   ),
                 )),
                 const SizedBox(
