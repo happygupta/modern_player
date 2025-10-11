@@ -293,6 +293,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
         setState(() {
           _currentPos = lastPosition;
           _currentVideoData = videoData;
+          _isLoading = false;
         });
       } else {
         await _getTracks();
@@ -301,6 +302,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
         setState(() {
           _currentPos = lastPosition;
           _currentVideoData = videoData;
+          _isLoading = false;
         });
       }
     } else if (videoData.sourceType == VideoSourceType.file) {
@@ -313,6 +315,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       setState(() {
         _currentPos = lastPosition;
         _currentVideoData = videoData;
+        _isLoading = false;
       });
     } else if (widget.videos.first.sourceType == VideoSourceType.youtube) {
       var yt = YoutubeExplode();
@@ -329,6 +332,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       setState(() {
         _currentPos = lastPosition;
         _currentVideoData = videoData;
+        _isLoading = false;
       });
 
       yt.close();
@@ -341,6 +345,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       setState(() {
         _currentPos = lastPosition;
         _currentVideoData = videoData;
+        _isLoading = false;
       });
     }
 
@@ -373,6 +378,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     setState(() {
       _currentPos = position;
       _seekPos = 0;
+      _isLoading = false;
     });
 
     widget.callbackOptions.onSeek?.call(position.inMilliseconds);
@@ -387,15 +393,17 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       });
 
       await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
-        player.play();
+        // player.play();
         setState(() {
           _currentPos = Duration(seconds: positionInSeconds);
           _seekPos = 0;
+          _isLoading = false;
         });
 
         widget.callbackOptions.onSeekForward?.call();
       });
     });
+    await player.play();
   }
 
   void _seekBackward() async {
@@ -407,15 +415,16 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       });
 
       await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
-        player.play();
         setState(() {
           _currentPos = Duration(seconds: positionInSeconds);
           _seekPos = 0;
+          _isLoading = false;
         });
 
         widget.callbackOptions.onSeekBackward?.call();
       });
     });
+    await player.play();
   }
 
   @override
