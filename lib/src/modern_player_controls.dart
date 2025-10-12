@@ -11,6 +11,27 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import 'widgets/modern_player_menus.dart';
 
+/// Debouncer class for handling delayed execution
+class Debouncer {
+  final Duration delay;
+  Timer? _timer;
+
+  Debouncer({required this.delay});
+
+  void call(VoidCallback callback) {
+    _timer?.cancel();
+    _timer = Timer(delay, callback);
+  }
+
+  void cancel() {
+    _timer?.cancel();
+  }
+
+  void dispose() {
+    _timer?.cancel();
+  }
+}
+
 class ModernPlayerControls extends StatefulWidget {
   const ModernPlayerControls({
     super.key,
@@ -97,6 +118,10 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
 
   List<ModernPlayerCustomActionButton> _customActionButtons = [];
 
+  /// Debouncing variables for seek operations
+  late Debouncer _seekDebouncer;
+  int _totalSeekOffset = 0; // Total accumulated seek offset in seconds
+
   @override
   void initState() {
     _valController = StreamController.broadcast();
@@ -106,6 +131,9 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
 
     _currentVideoData = widget.selectedQuality;
     _customActionButtons = widget.controlsOptions.customActionButtons ?? [];
+
+    // Initialize seek debouncer with 300ms delay
+    _seekDebouncer = Debouncer(delay: const Duration(milliseconds: 300));
 
     player.addListener(_listen);
     super.initState();
@@ -393,7 +421,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       });
 
       await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
-        // player.play();
+        player.play();
         setState(() {
           _currentPos = Duration(seconds: positionInSeconds);
           _seekPos = 0;
@@ -415,6 +443,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
       });
 
       await player.seekTo(Duration(seconds: positionInSeconds)).then((value) {
+        player.play();
         setState(() {
           _currentPos = Duration(seconds: positionInSeconds);
           _seekPos = 0;
@@ -427,6 +456,55 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     await player.play();
   }
 
+  /// Performs the actual seek operation with accumulated offset
+  void _performDebouncedSeek() async {
+    if (_totalSeekOffset == 0) return;
+
+    final currentPosition = player.value.position;
+    final newPosition = Duration(
+      seconds: (currentPosition.inSeconds + _totalSeekOffset)
+          .clamp(0, _duration.inSeconds),
+    );
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    await player.pause();
+    await player.seekTo(newPosition);
+    await player.play();
+
+    setState(() {
+      _currentPos = newPosition;
+      _seekPos = 0;
+      _isLoading = false;
+    });
+
+    // Call appropriate callback based on seek direction
+    if (_totalSeekOffset > 0) {
+      widget.callbackOptions.onSeekForward?.call();
+    } else {
+      widget.callbackOptions.onSeekBackward?.call();
+    }
+
+    widget.callbackOptions.onSeek?.call(newPosition.inMilliseconds);
+
+    // Reset the accumulated offset
+    _totalSeekOffset = 0;
+  }
+
+  /// Debounced seek forward by 10 seconds
+  void _seekForwardDebounced() {
+    _totalSeekOffset += 10;
+    _seekDebouncer.call(_performDebouncedSeek);
+  }
+
+  /// Debounced seek backward by 10 seconds
+  void _seekBackwardDebounced() {
+    _totalSeekOffset -= 10;
+    _seekDebouncer.call(_performDebouncedSeek);
+  }
+
   @override
   void dispose() {
     super.dispose();
@@ -434,15 +512,16 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
     player.removeListener(_listen);
     _hideTimer?.cancel();
     _statelessTimer?.cancel();
+    _seekDebouncer.dispose(); // Clean up seek debouncer
     ScreenBrightness().resetApplicationScreenBrightness();
   }
 
   void _onDoubleTap(TapDownDetails details) {
     if (widget.controlsOptions.doubleTapToSeek) {
       if (details.localPosition.dx > widget.viewSize.width / 2) {
-        _seekForward();
+        _seekForwardDebounced();
       } else {
-        _seekBackward();
+        _seekBackwardDebounced();
       }
     }
   }
@@ -885,7 +964,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                     child: IconButton(
                       onPressed: () {
                         _startHideTimer();
-                        _seekBackward();
+                        _seekBackwardDebounced();
                       },
                       icon: const Icon(
                         Icons.replay_10_rounded,
@@ -917,7 +996,7 @@ class _ModernPlayerControlsState extends State<ModernPlayerControls> {
                     child: IconButton(
                       onPressed: () {
                         _startHideTimer();
-                        _seekForward();
+                        _seekForwardDebounced();
                       },
                       icon: const Icon(
                         Icons.forward_10_rounded,
